@@ -8,6 +8,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import WebDriverException, TimeoutException
+import lib_resume_builder_AIHawk
 from lib_resume_builder_AIHawk import Resume,StyleManager,FacadeManager,ResumeGenerator
 from src.utils import chromeBrowserOptions
 from src.gpt import GPTAnswerer
@@ -17,7 +18,7 @@ from src.linkedIn_job_manager import LinkedInJobManager
 from src.job_application_profile import JobApplicationProfile
 
 # Suppress stderr
-sys.stderr = open(os.devnull, 'w')
+# sys.stderr = open(os.devnull, 'w')
 
 class ConfigError(Exception):
     pass
@@ -137,7 +138,7 @@ class FileManager:
         return (app_data_folder / 'secrets.yaml', app_data_folder / 'config.yaml', app_data_folder / 'plain_text_resume.yaml', output_folder)
 
     @staticmethod
-    def file_paths_to_dict(resume_file: Path | None, plain_text_resume_file: Path) -> dict:
+    def file_paths_to_dict(resume_file: Path, plain_text_resume_file: Path) -> dict:
         if not plain_text_resume_file.exists():
             raise FileNotFoundError(f"Plain text resume file not found: {plain_text_resume_file}")
 
@@ -153,23 +154,33 @@ class FileManager:
 def init_browser() -> webdriver.Chrome:
     try:
         options = chromeBrowserOptions()
+        options.add_argument("--headless")  # Run in headless mode
+        options.add_argument("--no-sandbox")  # Required for some environments
+        options.add_argument("--disable-dev-shm-usage")  # Overcome limited resource problems
+        # options.add_argument("--remote-debugging-port=9222")  # Enable DevTools
         service = ChromeService(ChromeDriverManager().install())
         return webdriver.Chrome(service=service, options=options)
     except Exception as e:
         raise RuntimeError(f"Failed to initialize browser: {str(e)}")
 
-def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_key: str):
+def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_key: str, resume_style: None):
     try:
         style_manager = StyleManager()
+        path_styles_library =  os.path.join(os.path.dirname(lib_resume_builder_AIHawk.__file__), "resume_style")
+        style_manager.set_styles_directory(path_styles_library)
+        dict_styles = style_manager.get_styles()
         resume_generator = ResumeGenerator()
         with open(parameters['uploads']['plainTextResume'], "r", encoding='utf-8') as file:
             plain_text_resume = file.read()
         resume_object = Resume(plain_text_resume)
         resume_generator_manager = FacadeManager(openai_api_key, style_manager, resume_generator, resume_object, Path("data_folder/output"))
-        os.system('cls' if os.name == 'nt' else 'clear')
-        resume_generator_manager.choose_style()
-        os.system('cls' if os.name == 'nt' else 'clear')
-        
+        if resume_style is None:
+            os.system('cls' if os.name == 'nt' else 'clear')
+            resume_generator_manager.choose_style()
+            os.system('cls' if os.name == 'nt' else 'clear')
+        else:
+            resume_generator_manager.selected_style = resume_style
+
         job_application_profile_object = JobApplicationProfile(plain_text_resume)
         
         browser = init_browser()
@@ -191,7 +202,8 @@ def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_k
 
 @click.command()
 @click.option('--resume', type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path), help="Path to the resume PDF file")
-def main(resume: Path = None):
+@click.option('--style', help="Style to generate to the resume PDF file")
+def main(resume: Path = None, style: str = None):
     try:
         data_folder = Path("data_folder")
         secrets_file, config_file, plain_text_resume_file, output_folder = FileManager.validate_data_folder(data_folder)
@@ -202,7 +214,7 @@ def main(resume: Path = None):
         parameters['uploads'] = FileManager.file_paths_to_dict(resume, plain_text_resume_file)
         parameters['outputFileDirectory'] = output_folder
         
-        create_and_run_bot(email, password, parameters, openai_api_key)
+        create_and_run_bot(email, password, parameters, openai_api_key, style)
     except ConfigError as ce:
         print(f"Configuration error: {str(ce)}")
         print("Refer to the configuration guide for troubleshooting: https://github.com/feder-cr/LinkedIn_AIHawk_automatic_job_application/blob/main/readme.md#configuration")
