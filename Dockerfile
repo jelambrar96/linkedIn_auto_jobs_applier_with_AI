@@ -41,4 +41,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # CMD [ "python3", "main.py", "--resume", "data_folder/resume.pdf"]
-ENTRYPOINT ["python3", "./main.py", "--style", "Default"]
+ENTRYPOINT ["python3", "./main.py"]
+CMD ["--style", "Default"]

@@ -1,0 +1,11 @@
+services:
+  ailinkedin:
+    image: ailinkedin
+    container_name: ailinkedin
+    build:
+      context: .
+    volumes:
+      - ./data_jelambrar_linkedin:/app/data_folder
+    command: ["--style", "default", "--resume", "./data_folder/resume.pdf"]
+    entrypoint: ["python3", "./main.py"]
+    restart: always
